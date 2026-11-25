@@ -1,9 +1,32 @@
+# Python and tools
 __pycache__/
 *.py[cod]
 .venv/
 .cache/
-.DS_Store
 .env
-*.zip
+.DS_Store
 *.part
 *.tmp
+*.log
+
+# Model weights are never committed: run scripts/download_models.py
+Text2Floorplan/models/
+Text2Floorplan/checkpoints/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
+*.gguf
+*.onnx
+*.h5
+
+# Archives
+*.zip
+*.tar
+*.gz
+*.7z
+
+# Produced when running
+Text2Floorplan/outputs/
+Text2Floorplan/report/llm_cache.backup.json
