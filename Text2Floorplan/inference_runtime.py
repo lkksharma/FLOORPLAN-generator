@@ -21,7 +21,7 @@ def build_parser():
     return Settings()
 
 @torch.no_grad()
-def run_inference(model, sample, args, return_discrete=True):
+def run_inference(model, sample, args, return_discrete=True, guide=None):
     (base, clip, room_mask, connection_mask, global_mask, node_connection,
      node_global, nodes, next_index, edge_valid, layout, _) = sample
     base = base.unsqueeze(0).to(DEVICE)
@@ -48,7 +48,8 @@ def run_inference(model, sample, args, return_discrete=True):
         low_sigma_threshold=args.infer_low_sigma_threshold,
         low_sigma_step=args.infer_low_sigma_step,
         low_sigma_steps=args.infer_low_sigma_steps,
-        final_refine=args.infer_discrete_refine, return_trajectory=True)
+        final_refine=args.infer_discrete_refine, return_trajectory=True,
+        guide=guide)
     if DEVICE.type == "cuda":
         torch.cuda.synchronize()
     return base, source, result, nodes, trajectory, layout

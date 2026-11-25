@@ -64,3 +64,11 @@ body{grid-template-rows:64px auto 52px minmax(0,1fr) 29px}
 @media(max-height:750px) and (min-width:851px){.empty-state{padding:18px}.empty-symbol{width:46px;height:46px;flex-shrink:0;border-radius:13px;font-size:30px}.empty-state .eyebrow{margin-top:12px}.empty-state h2{font-size:18px;margin:9px 0 7px}.empty-state p{font-size:11px;line-height:1.7}}
 
 .wall-joint{cursor:pointer}
+
+/* Plot chosen on the first page. */
+.plot-chip{display:flex;align-items:center;gap:11px;flex-shrink:0;padding:9px 14px 9px 10px;border:1px dashed #c3cfbf;border-radius:10px;background:#fff;text-decoration:none;color:#3b4d40}
+.plot-chip:hover{background:#f6faf3}.plot-chip svg{width:46px;height:46px}.plot-chip:not(.has-plot) svg{display:none}.plot-chip.has-plot{border-style:solid}
+.plot-chip strong{display:block;font-size:13px;font-weight:600}.plot-chip small{font-size:11px;color:#697d67}
+.plot-thumb-site{fill:#f6e9dd;stroke:#b3472f;stroke-width:1.5;stroke-dasharray:3 2;vector-effect:non-scaling-stroke}.plot-thumb-building{fill:#cfe2d4;stroke:#39785c;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.plot-outline{fill:#f6e9dd55;stroke:#b3472f;stroke-width:1.6;stroke-dasharray:6 4;vector-effect:non-scaling-stroke;pointer-events:none}
+@media(max-width:1180px){.generator-intro{display:none}}

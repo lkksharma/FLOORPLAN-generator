@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Your plot · Text2Floorplan</title><link rel="stylesheet" href="/plot.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 5h22v22H5zM5 17h13v10M18 5v7m0 5h9M11 5v6"/></svg></span><span>Text2Floorplan</span></div>
+    <ol class="steps" aria-label="Progress"><li class="now" aria-current="step"><b>1</b>Plot</li><li><b>2</b>Prompt</li><li><b>3</b>Floor plan</li></ol>
+    <a class="skip" href="/en?noplot">Continue without a plot</a>
+  </header>
+  <main>
+    <section class="intro">
+      <h1>Upload your plot</h1>
+      <p>Use a clear drawing with the whole boundary visible. The outline is detected for you, then you enter how long each edge is.</p>
+    </section>
+    <div class="work">
+      <section class="drawing">
+        <label id="drop" class="drop" for="file" tabindex="0">
+          <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/bmp" hidden>
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 34V14l16-6 16 8v22H14zM24 30V18m-5 5 5-5 5 5"/></svg>
+          <strong>Choose an image</strong><span>or drop it here. PNG, JPG or WebP</span>
+        </label>
+        <div id="stage" hidden>
+          <svg id="canvas" role="group" aria-label="Detected plot outline"></svg>
+          <div class="tools"><span id="hint">Drag a corner to correct it. Click + to add a corner, double-click a corner to remove it.</span><button type="button" id="redetect">Detect again</button><button type="button" id="replace">Change image</button></div>
+        </div>
+        <p id="image-error" class="error" role="alert"></p>
+      </section>
+      <form id="lengths" novalidate hidden>
+        <h2>Edge lengths</h2>
+        <p class="help">In metres. The letters match the drawing.</p>
+        <div id="fields"></div>
+        <p id="form-error" class="error" role="alert"></p>
+        <button type="submit" class="primary" id="next">Continue to prompt</button>
+      </form>
+    </div>
+  </main>
+  <script type="module" src="/plot.js"></script>
+</body>
+</html>

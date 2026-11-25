@@ -1,4 +1,4 @@
-"""Generate a floor-plan PNG and editable JSON without Revit or a browser.
+"""Generate a floor-plan PNG and editable JSON from the command line.
 
 Example: python infer.py --prompt "A 3-bedroom apartment with 2 bathrooms and 1 balcony."
 """
@@ -23,10 +23,14 @@ def main(argv=None):
     parser.add_argument("--clip-dir", type=Path, help="Local CLIP text encoder directory")
     parser.add_argument("--device", choices=("auto", "cpu"), default="auto",
                         help="Automatically use a compatible GPU, or force CPU")
-    parser.add_argument("--seed", type=int, help="Initial generation seed")
+    parser.add_argument("--seed", type=int, help="Start seed: the same seed, prompt and plot repeat the run "
+                        "(saved as start_seed in the JSON)")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "outputs" / "inference")
     parser.add_argument("--planner", choices=("auto", "rules"), default="auto",
                         help="auto: local LLM reads the prompt (falls back to rules); rules: rule reader only")
+    parser.add_argument("--plot", type=Path, help="Image of the plot; the plan will fill its outline")
+    parser.add_argument("--lengths", help="Edge lengths in metres, comma separated, in the order "
+                        "printed by: python plot_outline.py IMAGE")
     parser.add_argument("--language", choices=("en", "zh"), default="en",
                         help="Progress-message language; prompts remain English")
     args = parser.parse_args(argv)
@@ -36,6 +40,18 @@ def main(argv=None):
         parser.error(f"Checkpoint does not exist: {args.checkpoint}")
     if args.clip_dir is not None and not args.clip_dir.is_dir():
         parser.error(f"CLIP directory does not exist: {args.clip_dir}")
+
+    if (args.plot is None) != (args.lengths is None):
+        parser.error("--plot and --lengths go together")
+    plot = None
+    if args.plot is not None:
+        from plot_outline import PlotError, detect_outline, measure_plot
+        try:
+            plot = {"points": detect_outline(args.plot.read_bytes())["points"],
+                    "lengths": [float(v) for v in args.lengths.split(",")]}
+            measure_plot(**plot)
+        except (OSError, PlotError, ValueError) as error:
+            parser.error(str(error))
 
     output = args.output_dir.expanduser().resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -66,7 +82,8 @@ def main(argv=None):
     with tempfile.TemporaryDirectory(prefix=".request-", dir=output) as directory:
         request = Path(directory) / "request.json"
         request.write_text(json.dumps({"prompt": args.prompt, "seed": args.seed,
-                                       "language": args.language}, ensure_ascii=False), encoding="utf-8")
+                                       "language": args.language,
+                                       **({"plot": plot} if plot else {})}, ensure_ascii=False), encoding="utf-8")
         result = subprocess.run([sys.executable, "-B", str(ROOT / "backend_cli.py"),
                                  "--request", str(request), "--response", str(response)],
                                 cwd=ROOT, env=environment, check=False)

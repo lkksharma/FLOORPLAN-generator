@@ -72,6 +72,7 @@ def solve_heun(
     final_refine=False,
     final_hard_decode=True,
     return_trajectory=False,
+    guide=None,
 ):
     """Run continuous Heun and optionally project the final geometry."""
     device = source_xy.device
@@ -100,6 +101,8 @@ def solve_heun(
             sigma.view(1),
         )
         velocity = velocity * valid_float
+        if guide is not None:
+            velocity = guide(x_t, velocity, sigma) * valid_float
         xy_tilde = x_t + dt * velocity
 
         if sigma_next > 0.0:
@@ -108,6 +111,10 @@ def solve_heun(
                 sigma_next.view(1),
             )
             velocity_next = velocity_next * valid_float
+            if guide is not None:
+                velocity_next = guide(
+                    xy_tilde, velocity_next, sigma_next
+                ) * valid_float
             x_next = x_t + 0.5 * dt * (
                 velocity + velocity_next
             )

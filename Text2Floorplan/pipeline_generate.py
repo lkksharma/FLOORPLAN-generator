@@ -10,7 +10,9 @@ import copy
 import json
 import os
 import sys
+from dataclasses import replace
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 import matplotlib
@@ -50,6 +52,7 @@ from door_window_rules import (
 )
 from model import FlowMatchingPlanTransformer
 from plan_quality import load_physical_scale
+import plot_layout
 from restore_canvas_aspect import (
     fit_records_to_canvas,
     load_room_aspect_stats,
@@ -195,6 +198,7 @@ def infer(
     seed,
     steps,
     use_discrete,
+    guide=None,
 ):
     torch.manual_seed(seed)
     if train.DEVICE.type == "cuda":
@@ -214,6 +218,7 @@ def infer(
         sample,
         args,
         return_discrete=use_discrete,
+        guide=guide,
     )
 
 
@@ -462,7 +467,34 @@ def _record_raw_metrics(topology, raw_records, adjacency_pairs):
     )
 
 
-def generate_plan_data(prompt, seed_override=None, relax_level=0):
+@lru_cache(maxsize=1)
+def _cached_flow_model(checkpoint):
+    return load_flow_model(Path(checkpoint))
+
+
+PLOT_MIN_DOOR_WALL_M = 1.3
+
+
+def _half_span(outline):
+    x0, y0, x1, y1 = outline.bounds
+    return max(x1 - x0, y1 - y0) / 2
+
+
+def _plot_opening_ratios(outline):
+    """Openings have a real size whatever the plot measures."""
+    half = _half_span(outline)
+    return {"door_length_ratio": 0.95 / half, "door_thickness_ratio": 0.2 / half,
+            "door_gap_ratio": 0.15 / half, "window_length_ratio": 1.2 / half,
+            "window_thickness_ratio": 0.2 / half, "window_gap_ratio": 0.3 / half}
+
+
+def _plot_size(outline):
+    """Size word the model was trained with, from the area to be built."""
+    return "small" if outline.area < 75 else "medium" if outline.area < 125 else "large"
+
+
+def generate_plan_data(prompt, seed_override=None, relax_level=0, outline=None):
+    """Generate one layout. ``outline`` (metres) makes it fill that exact shape."""
     checkpoint = find_flow_best_checkpoint()
     steps = INFERENCE_STEPS
     seed = (
@@ -477,6 +509,8 @@ def generate_plan_data(prompt, seed_override=None, relax_level=0):
     # conditioning room graph. See prompt_planner.py.
     program = prompt_planner.relax_program(
         prompt_planner.plan_prompt(prompt), relax_level)
+    if outline is not None:
+        program = replace(program, size=_plot_size(outline), notes=list(program.notes))
     topology, room_labels = prompt_planner.topology_from_program(program, rng)
     corner_rules = get_default_corner_count_rules()
     apartment = build_apartment(
@@ -489,13 +523,17 @@ def generate_plan_data(prompt, seed_override=None, relax_level=0):
         train.DEVICE,
     )[0]
     sample = to_sample(apartment, clip_embedding)
-    model = load_flow_model(checkpoint)
+    model = (load_flow_model(checkpoint) if outline is None
+             else _cached_flow_model(str(checkpoint)))
+    guide = (None if outline is None
+             else plot_layout.Guide(outline, apartment["corner_layout"]))
     result = infer(
         model,
         sample,
         seed,
         steps,
         use_discrete=USE_DISCRETE,
+        guide=guide,
     )
     _, source_xy, output_xy, node_features, _, layout = result
 
@@ -529,24 +567,32 @@ def generate_plan_data(prompt, seed_override=None, relax_level=0):
         else:
             requested_size = "medium"
             size_source = "default_medium"
-    restore_info = restore_canvas_geometry(
-        processed,
-        load_room_aspect_stats(),
-        room_count=int(topology.valid_mask.sum()),
-        rng=rng,
-        size=requested_size,
-    )
+    if outline is None:
+        restore_info = restore_canvas_geometry(
+            processed,
+            load_room_aspect_stats(),
+            room_count=int(topology.valid_mask.sum()),
+            rng=rng,
+            size=requested_size,
+        )
+    else:
+        size_source = "plot"
+        restore_info = {"plot_fit": plot_layout.fit_rooms(processed, outline)}
+        pixel_to_meter, _ = plot_layout.to_canvas(processed, outline)
     base_door_config = postprocess.PostProcessConfig()
     raw_door_config, door_scale = build_raw_door_config(
         processed,
         base_door_config,
+        **({} if outline is None else
+           {"minimum_ratio": PLOT_MIN_DOOR_WALL_M / _half_span(outline)}),
     )
     # Before any door repair: which requested connections does the generated
     # geometry already honour? (report/eval_generation.py uses this.)
     restore_info["pre_repair_unfit"] = len(postprocess.unfit_connected_edges(
         processed, adjacency_pairs, raw_door_config))
     LAST_METRICS["unfit"] = restore_info["pre_repair_unfit"]
-    door_repaired = postprocess.ensure_doorable_connected_edges(
+    # The repair moves walls, which would break the plot outline.
+    door_repaired = [] if outline is not None else postprocess.ensure_doorable_connected_edges(
         processed,
         adjacency_pairs,
         raw_door_config,
@@ -556,14 +602,31 @@ def generate_plan_data(prompt, seed_override=None, relax_level=0):
         restore_info["fit"] = fit_records_to_canvas(processed)
         restore_info["canvas"] = place_records_on_canvas(processed)
     from geometry_cleanup import clean_thin_geometry
-    physical_scale = load_physical_scale(requested_size)
-    pixel_to_meter = physical_scale["pixel_to_meter"]
+    if outline is None:
+        physical_scale = load_physical_scale(requested_size)
+        pixel_to_meter = physical_scale["pixel_to_meter"]
+    else:
+        physical_scale = {"size": requested_size, "pixel_to_meter": pixel_to_meter, "source": "plot"}
     restore_info["physical_scale"] = physical_scale
     restore_info["thin_geometry"] = clean_thin_geometry(processed, pixel_to_meter)
+    if outline is not None:
+        plot_layout.check_outline(processed, outline)
     adjacency_pairs, edge_changes = prompt_planner.fit_edges_to_geometry(
         processed, adjacency_pairs, raw_door_config,
         topology.room_ids_by_type["living"][0])
     restore_info["edge_changes"] = edge_changes
+    if outline is not None:
+        adjacency_pairs, poor = plot_layout.improve_access(
+            processed, adjacency_pairs, raw_door_config,
+            topology.room_ids_by_type["living"][0])
+        restore_info["plot_fit"]["poor_access"] = poor
+        room_labels, lost = plot_layout.settle_ensuites(
+            processed, adjacency_pairs, room_labels,
+            prompt_planner.ENSUITE, prompt_planner.SLEEPING)
+        if lost:
+            program.notes.append("An en-suite bathroom could not be placed next to a bedroom, "
+                                 "so it opens as a normal bathroom.")
+        restore_info["plot_fit"]["penalty"] += 0.3 * poor + 0.4 * lost + 0.03 * len(edge_changes)
     unfit_after = postprocess.unfit_connected_edges(
         processed,
         adjacency_pairs,
@@ -583,12 +646,10 @@ def generate_plan_data(prompt, seed_override=None, relax_level=0):
         adjacency_pairs,
         living_id,
         rng=rng,
-        door_length_ratio=DOOR_LENGTH_RATIO,
-        door_thickness_ratio=0.03,
-        door_gap_ratio=0.03,
-        window_length_ratio=WINDOW_LENGTH_RATIO,
-        window_thickness_ratio=0.03,
-        window_gap_ratio=0.04,
+        **({"door_length_ratio": DOOR_LENGTH_RATIO, "door_thickness_ratio": 0.03,
+            "door_gap_ratio": 0.03, "window_length_ratio": WINDOW_LENGTH_RATIO,
+            "window_thickness_ratio": 0.03, "window_gap_ratio": 0.04}
+           if outline is None else _plot_opening_ratios(outline)),
         pixel_to_meter=pixel_to_meter,
     )
     overlays = {

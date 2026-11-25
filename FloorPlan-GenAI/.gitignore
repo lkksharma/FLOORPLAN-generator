@@ -1,9 +1,0 @@
-.venv/
-__pycache__/
-*.py[cod]
-frontend/node_modules/
-frontend/dist/
-original_source/Text2Floorplan/
-outputs/generated/*
-!outputs/generated/.gitkeep
-outputs/smoke/

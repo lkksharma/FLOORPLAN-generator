@@ -1,0 +1,66 @@
+{
+  "spill": {
+    "L": {
+      "unguided": 0.1472,
+      "guided": 0.0137
+    },
+    "T": {
+      "unguided": 0.2853,
+      "guided": 0.0516
+    }
+  },
+  "fit": {
+    "L": {
+      "samples": 14,
+      "fits": 9,
+      "valid": 3,
+      "rejections": [
+        "connected rooms have no generated doorway: [(5, 8)]",
+        "connected rooms have no generated doorway: [(0, 8), (5, 8)]",
+        "bathroom_1 is only 0.9 m wide",
+        "bathroom_1 is only 1.0 m wide",
+        "no space was left for bedroom_1",
+        "no space was left for bathroom_1",
+        "connected rooms have no generated doorway: [(4, 8)]",
+        "bedroom_3 is only 0.9 m wide",
+        "connected rooms have no generated doorway: [(6, 8)]",
+        "connected rooms have no generated doorway: [(6, 8)]",
+        "bathroom 1 is too small: 1.72 m\u00b2; minimum 2.00 m\u00b2"
+      ]
+    },
+    "rectangle": {
+      "samples": 14,
+      "fits": 14,
+      "valid": 6,
+      "rejections": [
+        "connected rooms have no generated doorway: [(4, 8)]",
+        "opening has no complete wall host: front_door, [8]",
+        "connected rooms have no generated doorway: [(0, 8)]",
+        "connected rooms have no generated doorway: [(4, 8)]",
+        "connected rooms have no generated doorway: [(5, 8), (8, 9)]",
+        "connected rooms have no generated doorway: [(5, 8), (6, 8)]",
+        "connected rooms have no generated doorway: [(6, 8)]",
+        "opening has no complete wall host: front_door, [8]"
+      ]
+    },
+    "T": {
+      "samples": 14,
+      "fits": 9,
+      "valid": 2,
+      "rejections": [
+        "bathroom 1 is too small: 1.99 m\u00b2; minimum 2.00 m\u00b2",
+        "connected rooms have no generated doorway: [(5, 8)]",
+        "connected rooms have no generated doorway: [(0, 8), (5, 8)]",
+        "connected rooms have no generated doorway: [(3, 8)]",
+        "bathroom_1 is only 1.0 m wide",
+        "bedroom_0 is only 1.9 m wide",
+        "living_0 is only 1.8 m wide",
+        "connected rooms have no generated doorway: [(3, 8), (7, 8)]",
+        "connected rooms have no generated doorway: [(6, 8)]",
+        "connected rooms have no generated doorway: [(6, 8), (8, 9)]",
+        "bathroom_1 is only 1.1 m wide",
+        "no space was left for storage_0"
+      ]
+    }
+  }
+}

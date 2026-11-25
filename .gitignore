@@ -1,5 +1,9 @@
 __pycache__/
+*.py[cod]
 .venv/
-deployment/weights/
-deployment/results/
-output/trained_r2gmodel/
+.cache/
+.DS_Store
+.env
+*.zip
+*.part
+*.tmp

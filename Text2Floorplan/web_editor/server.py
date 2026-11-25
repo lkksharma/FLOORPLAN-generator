@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 import mimetypes
 import os
@@ -14,10 +16,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from plot_outline import detect_outline, measure_plot
 from web_editor.model_document import apply_command, import_document
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = Path(__file__).resolve().parent / "static"
+# Page routes: the plot step comes first, the prompt page second.
+PAGES = {"/": "plot.html", "/plot": "plot.html", "/plot/": "plot.html",
+         "/en": "index.html", "/en/": "index.html", "/zh": "index.html", "/zh/": "index.html"}
+MAX_BODY, MAX_IMAGE_BODY = 2_000_000, 12_000_000
 
 
 class EditorServer(ThreadingHTTPServer):
@@ -27,13 +34,16 @@ class EditorServer(ThreadingHTTPServer):
         super().__init__(address, Handler)
         self.options, self.jobs, self.lock = options, {}, threading.Lock()
 
-    def generate(self, job_id, prompt, language):
+    def generate(self, job_id, prompt, language, plot=None):
         job = self.jobs[job_id]
         folder = ROOT / "outputs" / "web_editor" / job_id
         try:
             folder.mkdir(parents=True)
             request, response = folder / "request.json", folder / "plan.json"
-            request.write_text(json.dumps({"prompt": prompt, "language": language}), encoding="utf-8")
+            document = {"prompt": prompt, "language": language}
+            if plot is not None:
+                document["plot"] = plot
+            request.write_text(json.dumps(document), encoding="utf-8")
             job["folder"] = folder
             environment = os.environ.copy()
             environment["PYTHONIOENCODING"] = "utf-8"
@@ -64,6 +74,16 @@ class EditorServer(ThreadingHTTPServer):
             with self.lock:
                 if job["state"] != "cancelled":
                     job.update(state="failed", error=str(error))
+
+
+def read_image(value):
+    """Decode a data URL (or plain base64) sent by the plot page."""
+    if not isinstance(value, str):
+        raise ValueError("Send the plot image as base64")
+    try:
+        return base64.b64decode(value.partition(",")[2] if value.startswith("data:") else value, validate=True)
+    except (binascii.Error, ValueError):
+        raise ValueError("The plot image could not be read") from None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -100,8 +120,7 @@ class Handler(BaseHTTPRequestHandler):
                     except (ValueError, OSError):
                         pass
             return self.reply(result)
-        target = (STATIC / ("index.html" if path in {"/", "/en", "/zh", "/en/", "/zh/"}
-                            else path.lstrip("/"))).resolve()
+        target = (STATIC / PAGES.get(path, path.lstrip("/"))).resolve()
         if not target.is_relative_to(STATIC.resolve()) or not target.is_file():
             return self.reply({"error": "Not found"}, 404)
         mime = {".js": "text/javascript", ".css": "text/css", ".html": "text/html"}.get(target.suffix, mimetypes.guess_type(str(target))[0] or "application/octet-stream")
@@ -112,10 +131,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply({"error": "Local editor request required"}, 403)
         try:
             size = int(self.headers.get("Content-Length", "0"))
-            if not 0 < size <= 2_000_000:
-                return self.reply({"error": "Document size must be below 2 MB"}, 413)
-            body = json.loads(self.rfile.read(size))
             path = urlsplit(self.path).path
+            limit = MAX_IMAGE_BODY if path == "/api/plot/detect" else MAX_BODY
+            if not 0 < size <= limit:
+                return self.reply({"error": f"Document size must be below {limit // 1_000_000} MB"}, 413)
+            body = json.loads(self.rfile.read(size))
+            if path == "/api/plot/detect":
+                return self.reply(detect_outline(read_image(body["image"])))
+            if path == "/api/plot/measure":
+                return self.reply(measure_plot(body["points"], body["lengths"]))
             if path == "/api/import":
                 return self.reply(import_document(body["plan"]))
             if path == "/api/edit":
@@ -124,12 +148,16 @@ class Handler(BaseHTTPRequestHandler):
                 prompt = body["prompt"]
                 if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 1000:
                     raise ValueError("Enter a supported apartment prompt")
+                plot = body.get("plot")
+                if plot is not None:
+                    measure_plot(plot["points"], plot["lengths"])  # reject bad plots before the job starts
+                    plot = {"points": plot["points"], "lengths": plot["lengths"]}
                 with self.server.lock:
                     if any(job["state"] == "running" for job in self.server.jobs.values()):
                         return self.reply({"error": "An inference job is already running"}, 409)
                     job_id = uuid.uuid4().hex
                     self.server.jobs[job_id] = {"state": "running", "message": "Starting local inference…"}
-                threading.Thread(target=self.server.generate, args=(job_id, prompt, body.get("language", "en")), daemon=True).start()
+                threading.Thread(target=self.server.generate, args=(job_id, prompt, body.get("language", "en"), plot), daemon=True).start()
                 return self.reply({"job_id": job_id}, 202)
             if path.startswith("/api/jobs/") and path.endswith("/cancel"):
                 with self.server.lock:
@@ -171,7 +199,7 @@ def main():
         options.checkpoint = next((p / "models" / "flow_matching_best.pth" for p in installed
                                    if (p / "models" / "flow_matching_best.pth").is_file()), None)
     server = EditorServer(("127.0.0.1", options.port), options)
-    url = f"http://127.0.0.1:{server.server_port}/{options.language}"
+    url = f"http://127.0.0.1:{server.server_port}/" + ("plot" if options.language == "en" else options.language)
     print(f"Text2Floorplan: {url}", flush=True)
     if options.open:
         webbrowser.open(url)
