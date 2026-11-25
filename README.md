@@ -3,7 +3,7 @@
 Text and an optional plot drawing in, an editable floor plan out (walls, doors, windows, room areas, 2D and 3D).
 It runs offline on a laptop.
 
-Generative AI (UCS748) project.
+Generative AI (UCS748) project --- Group 13.
 
 | Name | Roll no. | Group |
 |---|---|---|
