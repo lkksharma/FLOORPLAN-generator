@@ -167,7 +167,7 @@ Then compare with the committed numbers (timings are ignored) and redraw the cha
 .venv/bin/python report/make_charts.py
 ```
 
-`eval_planner.py` and `eval_generation.py` reuse Qwen's saved replies in `report/llm_cache.json`. To ask Qwen again:
+`eval_planner.py` and `eval_generation.py` reuse Qwen's saved replies in `report/llm_cache.json`. To ask Qwen again (about 10 minutes; all 30 replies came back identical):
 
 ```bash
 mv report/llm_cache.json report/llm_cache.backup.json
